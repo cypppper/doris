@@ -20,7 +20,6 @@
 #include <mutex>
 #include <string>
 
-#include "vec/columns/column_array.h"
 #include "vec/exprs/lambda_function/lambda_function.h"
 
 namespace doris::vectorized {

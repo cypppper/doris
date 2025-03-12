@@ -16,6 +16,7 @@
 // under the License.
 
 #include <fmt/core.h>
+
 #include <memory>
 #include <string>
 #include <utility>
@@ -33,9 +34,9 @@
 #include "vec/data_types/data_type_array.h"
 #include "vec/data_types/data_type_nullable.h"
 #include "vec/exprs/lambda_function/lambda_function.h"
+#include "vec/exprs/lambda_function/lambda_function_factory.h"
 #include "vec/exprs/vcolumn_ref.h"
 #include "vec/exprs/vslot_ref.h"
-#include "vec/exprs/lambda_function/lambda_function_factory.h"
 #include "vec/functions/array/function_array_utils.h"
 #include "vec/functions/function.h"
 
@@ -55,23 +56,22 @@ struct ReduceLambdaArgs {
     const ColumnArray::Offsets64* offsets_ptr = nullptr;
 };
 
-
 class ArrayReduceFunction : public LambdaFunction {
     ENABLE_FACTORY_CREATOR(ArrayReduceFunction);
 
 public:
-	~ArrayReduceFunction() override = default;
+    ~ArrayReduceFunction() override = default;
 
-	static constexpr auto name = "array_reduce";
+    static constexpr auto name = "array_reduce";
 
-	static LambdaFunctionPtr create() { return std::make_shared<ArrayReduceFunction>(); }
+    static LambdaFunctionPtr create() { return std::make_shared<ArrayReduceFunction>(); }
 
-	std::string get_name() const override { return name; }
+    std::string get_name() const override { return name; }
 
-	doris::Status execute(VExprContext* context, doris::vectorized::Block* block,
-					int* result_column_id, const DataTypePtr& result_type,
-					const VExprSPtrs& children) override {
-		ReduceLambdaArgs args;
+    doris::Status execute(VExprContext* context, doris::vectorized::Block* block,
+                          int* result_column_id, const DataTypePtr& result_type,
+                          const VExprSPtrs& children) override {
+        ReduceLambdaArgs args;
         // collect used slot ref in lambda function body
         _collect_slot_ref_column_id(children[0], args);
 
@@ -97,24 +97,23 @@ public:
             }
         }
 
-		// children size = 3, lambda_fn, array, array(initial_value)
-		doris::vectorized::ColumnNumbers arguments(children.size() - 1);
-		for (int i = 1; i < children.size(); ++i) {
-			int column_id = -1;
-			RETURN_IF_ERROR(children[i]->execute(context, block, &column_id));
-			arguments[i - 1] = column_id;
-		}
-		/* 
-			arguments[0]: array
-			arguments[1]: array(initial_value)
-		*/
+        // children size = 3, lambda_fn, array, array(initial_value)
+        doris::vectorized::ColumnNumbers arguments(children.size() - 1);
+        for (int i = 1; i < children.size(); ++i) {
+            int column_id = -1;
+            RETURN_IF_ERROR(children[i]->execute(context, block, &column_id));
+            arguments[i - 1] = column_id;
+        }
+        /*
+            arguments[0]: array
+            arguments[1]: array(initial_value)
+        */
 
-		
-		//2. get the result column from executed expr, and the needed is nested column of array
+        //2. get the result column from executed expr, and the needed is nested column of array
         std::vector<ColumnPtr> lambda_expr_arguments_cols(arguments.size());
 
         // arguments.size = 2, first is array
-        for (int i = 0; i < arguments.size(); ++i) {  
+        for (int i = 0; i < arguments.size(); ++i) {
             const auto& array_column_type_name = block->get_by_position(arguments[i]);
             auto column_array = array_column_type_name.column->convert_to_full_column_if_const();
             auto type_array = array_column_type_name.type;
@@ -137,15 +136,16 @@ public:
             }
             lambda_expr_arguments_cols[i] = column_array;
             names.push_back("R" + array_column_type_name.name);
-            data_types.push_back(col_type.get_nested_type());  
+            data_types.push_back(col_type.get_nested_type());
         }
 
         ColumnPtr result_col = nullptr;
         DataTypePtr res_type;
         std::string res_name;
-        
-        // cur_size equals num of elems in an array (3)
-        args.cur_size = (*args.offsets_ptr)[args.current_row_idx] - (*args.offsets_ptr)[args.current_row_idx - 1]; 
+
+        // cur_size equals num of elems in an array
+        args.cur_size = (*args.offsets_ptr)[args.current_row_idx] -
+                        (*args.offsets_ptr)[args.current_row_idx - 1];
 
         while (args.current_row_idx < block->rows()) {
             Block final_block;
@@ -159,14 +159,15 @@ public:
                             names[i]);
                 }
                 final_block.insert(std::move(data_column));
-            }  // final_block columns num = gap
-            
-            auto array_size = (int)args.cur_size; // 3
+            } // final_block columns num = gap
+
+            auto array_size = (int)args.cur_size;
             for (int i = 0; i < array_size; i++) {
                 ColumnWithTypeAndName data_column;
-                data_column = ColumnWithTypeAndName(result_type, fmt::format("reduce temp col {}", i));
+                data_column =
+                        ColumnWithTypeAndName(result_type, fmt::format("reduce temp col {}", i));
                 final_block.insert(std::move(data_column));
-            }  // final_block columns num = gap + array_size
+            } // final_block columns num = gap + array_size
 
             // append initial_value column into final_block
             {
@@ -180,12 +181,13 @@ public:
             for (int i = 0; i < array_size; i++) {
                 Field field;
                 col_array.get(args.current_row_idx, field);
-                const auto & array = field.get<Array>();
+                const auto& array = field.get<Array>();
                 DCHECK_EQ(array.size(), array_size);
                 columns[gap + i]->insert(array[i]);
             }
 
-            _add_initial_value_column_in_reduce(columns, block, args, gap + array_size, arguments[1]);
+            _add_initial_value_column_in_reduce(columns, block, args, gap + array_size,
+                                                arguments[1]);
             final_block.set_columns(std::move(columns));
 
             // run lambda function
@@ -198,30 +200,29 @@ public:
                 // initial value must push to the first place
                 lambda_types[0] = final_block.get_by_position(gap + array_size).type;
                 lambda_types[1] = final_block.get_by_position(gap + i).type;
-                
+
                 for (int j = 0; j < 2; j++) {
-                    auto data_column = ColumnWithTypeAndName(lambda_types[j], fmt::format("lambda temp col {}", j));
+                    auto data_column = ColumnWithTypeAndName(lambda_types[j],
+                                                             fmt::format("lambda temp col {}", j));
                     lambda_block.insert(std::move(data_column));
                 }
                 Columns cols;
                 cols.push_back(final_block.get_columns()[gap + array_size]);
                 cols.push_back(final_block.get_columns()[gap + i]);
-                
+
                 lambda_block.set_columns(cols);
                 RETURN_IF_ERROR(children[0]->execute(context, &lambda_block, result_column_id));
-                auto res_col = lambda_block.get_by_position(*result_column_id)
-                                                        .column;
-     
+                auto res_col = lambda_block.get_by_position(*result_column_id).column;
+
                 res_type = lambda_block.get_by_position(*result_column_id).type;
                 res_name = lambda_block.get_by_position(*result_column_id).name;
-                
+
                 final_block.get_by_position(gap + array_size) = ColumnWithTypeAndName(
-                    cast_to_type(res_col, result_type), 
-                    result_type, "lambda tmp result");
+                        _cast_to_type(res_col, result_type), result_type, "lambda tmp result");
             }
 
             auto res_col = final_block.get_by_position(gap + array_size)
-                                    .column->convert_to_full_column_if_const();
+                                   .column->convert_to_full_column_if_const();
             DCHECK_EQ(res_col->size(), 1);
             // one row end
             if (!result_col) {
@@ -232,7 +233,8 @@ public:
             }
 
             args.current_row_idx += 1;
-            args.cur_size = (*args.offsets_ptr)[args.current_row_idx] - (*args.offsets_ptr)[args.current_row_idx - 1]; 
+            args.cur_size = (*args.offsets_ptr)[args.current_row_idx] -
+                            (*args.offsets_ptr)[args.current_row_idx - 1];
         }
 
         // 4. get the result column after execution, reassemble it into a new array column, and return.
@@ -240,8 +242,8 @@ public:
         block->insert(std::move(final_res_col));
         *result_column_id = block->columns() - 1;
 
-		return Status::OK();
-	}
+        return Status::OK();
+    }
 
 private:
     bool _contains_column_id(ReduceLambdaArgs& args, int id) {
@@ -272,24 +274,26 @@ private:
         }
     }
 
-    void _add_initial_value_column_in_reduce(std::vector<MutableColumnPtr>& columns, Block* block, ReduceLambdaArgs& args, int res_col_id, int src_col_id) {
-        const auto & array_col_type_name = block->get_by_position(src_col_id);
+    void _add_initial_value_column_in_reduce(std::vector<MutableColumnPtr>& columns, Block* block,
+                                             ReduceLambdaArgs& args, int res_col_id,
+                                             int src_col_id) {
+        const auto& array_col_type_name = block->get_by_position(src_col_id);
         auto src_column = array_col_type_name.column
-               ->convert_to_full_column_if_const();  // column of array(len = 1)
+                                  ->convert_to_full_column_if_const(); // column of array(len = 1)
         if (array_col_type_name.type->is_nullable()) {
-            src_column = assert_cast<const ColumnNullable*>(src_column.get())
-                                       ->get_nested_column_ptr();
+            src_column =
+                    assert_cast<const ColumnNullable*>(src_column.get())->get_nested_column_ptr();
         }
         // get element at row index
         Field fld;
-        const auto& col_arr = assert_cast<const ColumnArray&>(* src_column);
+        const auto& col_arr = assert_cast<const ColumnArray&>(*src_column);
         col_arr.get(args.current_row_idx, fld);
         const auto& arr = fld.get<Array>();
         DCHECK_EQ(arr.size(), 1);
         columns[res_col_id]->insert(arr[0]);
     }
 
-    static ColumnPtr cast_to_type(ColumnPtr from, DataTypePtr totype) {
+    static ColumnPtr _cast_to_type(ColumnPtr from, DataTypePtr totype) {
         auto to = totype->create_column();
         Field fld;
         from->get(0, fld);
