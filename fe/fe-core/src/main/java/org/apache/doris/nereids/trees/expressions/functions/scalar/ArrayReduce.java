@@ -18,12 +18,10 @@
 package org.apache.doris.nereids.trees.expressions.functions.scalar;
 
 import org.apache.doris.catalog.FunctionSignature;
-import org.apache.doris.nereids.trees.expressions.ArrayItemReference;
 import org.apache.doris.nereids.trees.expressions.Expression;
+import org.apache.doris.nereids.trees.expressions.functions.AlwaysNullable;
 import org.apache.doris.nereids.trees.expressions.functions.ExplicitlyCastableSignature;
-import org.apache.doris.nereids.trees.expressions.functions.PropagateNullable;
 import org.apache.doris.nereids.trees.expressions.visitor.ExpressionVisitor;
-import org.apache.doris.nereids.types.ArrayType;
 import org.apache.doris.nereids.types.DataType;
 import org.apache.doris.nereids.types.LambdaType;
 import org.apache.doris.nereids.types.coercion.FollowToAnyDataType;
@@ -37,7 +35,7 @@ import java.util.List;
  * ScalarFunction 'array_reduce'.
  */
 public class ArrayReduce extends ScalarFunction
-        implements ExplicitlyCastableSignature, PropagateNullable {
+        implements ExplicitlyCastableSignature, AlwaysNullable {
 
     public static final List<FunctionSignature> SIGNATURES = ImmutableList.of(
             FunctionSignature.ret(new FollowToAnyDataType(0)).args(LambdaType.INSTANCE)
@@ -65,14 +63,7 @@ public class ArrayReduce extends ScalarFunction
     public DataType getDataType() {
         Preconditions.checkArgument(children.get(0) instanceof Lambda,
                 "The first arg of array_reduce must be lambda");
-        return ArrayType.of(((Lambda) children.get(0)).getRetType(), true);
-    }
-
-    @Override
-    public boolean nullable() {
-        return ((Lambda) children.get(0)).getLambdaArguments().stream()
-            .map(ArrayItemReference::getArrayExpression)
-            .anyMatch(Expression::nullable);
+        return ((Lambda) children.get(0)).getRetType();
     }
 
     @Override

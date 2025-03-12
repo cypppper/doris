@@ -585,7 +585,7 @@ public class ExpressionTranslator extends DefaultExpressionVisitor<Expr, PlanTra
                 : NullableMode.ALWAYS_NOT_NULLABLE;
         org.apache.doris.catalog.Function catalogFunction = new Function(
                 new FunctionName(arrayReduce.getName()), argTypes,
-                ArrayType.create(lambda.getRetType().toCatalogDataType(), true),
+                lambda.getRetType().toCatalogDataType(),
                 true, true, nullableMode);
 
         // create catalog FunctionCallExpr without analyze again
