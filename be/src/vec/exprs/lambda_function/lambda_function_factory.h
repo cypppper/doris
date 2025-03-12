@@ -20,6 +20,7 @@
 #include <mutex>
 #include <string>
 
+#include "vec/columns/column_array.h"
 #include "vec/exprs/lambda_function/lambda_function.h"
 
 namespace doris::vectorized {
@@ -28,6 +29,7 @@ class LambdaFunctionFactory;
 
 void register_function_array_map(LambdaFunctionFactory& factory);
 void register_function_array_filter(LambdaFunctionFactory& factory);
+void register_function_array_reduce(LambdaFunctionFactory& factory);
 
 class LambdaFunctionFactory {
     using Creator = std::function<LambdaFunctionPtr()>;
@@ -62,6 +64,7 @@ public:
         std::call_once(oc, []() {
             register_function_array_map(instance);
             register_function_array_filter(instance);
+            register_function_array_reduce(instance);
         });
         return instance;
     }
